@@ -1,0 +1,12 @@
+livekit-agents
+livekit-plugins-openai
+python-dotenv
+livekit-plugins-silero
+pydantic-settings>=2.7.1
+livekit-api
+flask[async]
+flask
+flask-cors
+uvicorn
+beanie
+ollama
