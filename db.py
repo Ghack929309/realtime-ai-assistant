@@ -49,7 +49,7 @@ class DB_queries:
         knowledge_level: Optional[str] = None,
         score: Optional[int] = 0,
         test_taken: Optional[bool] = False,
-    ):
+    ) -> Student:
         try:
             student = Student.find_one({"first_name": first_name}).update(
                 {

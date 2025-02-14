@@ -1,6 +1,6 @@
 import enum
 import logging
-from typing import Annotated, Any, Dict
+from typing import Annotated, Any, Dict, Optional
 
 from livekit.agents import llm
 
@@ -37,6 +37,7 @@ class AssistantFunction(llm.FunctionContext):
         }
 
     def _get_query_str(self, query_dict: Dict[str, Any]) -> str:
+        """return a string with the query"""
         str_result = ""
         for key, val in query_dict.items():
             if val is None:
@@ -51,23 +52,31 @@ class AssistantFunction(llm.FunctionContext):
     async def find_student(
         self,
         first_name: Annotated[str, llm.TypeInfo(description="le nom de l'etudiant")],
-        last_name: Annotated[str, llm.TypeInfo(description="le prenom de l'etudiant")],
+        last_name: Optional[
+            Annotated[str, llm.TypeInfo(description="le prenom de l'etudiant")]
+        ],
     ) -> Student:
-        """trouver un etudiant a partir de son nom et de son prenom"""
-        logger.info(
-            "recherche un etudiant a partir de son nom et de son prenom %s %s",
-            first_name,
-            last_name,
-        )
-        student = await db.get_student(first_name, last_name)
-        if not student:
-            logger.info("etudiant %s %s not found", first_name, last_name)
-            return "impossible de trouver un etudiant avec ce nom et ce prenom"
-        student_detail = self._get_query_str(self._student_details)
+        try:
+            """trouver un etudiant a partir de son nom et de son prenom"""
+            logger.info(
+                "recherche un etudiant a partir de son nom et de son prenom %s %s",
+                first_name,
+                last_name,
+            )
+            student = await db.get_student(first_name, last_name)
+            if not student:
+                logger.info("etudiant %s %s not found", first_name, last_name)
+                return "impossible de trouver un etudiant avec ce nom et ce prenom"
+            student_detail = self._get_query_str(self._student_details)
 
-        return f" les informations sur l'etudiant {first_name} {last_name} sont \n{student_detail}"
+            return f" les informations sur l'etudiant {first_name} {last_name} sont \n{student_detail}"
+        except Exception as e:
+            logger.info("error impossible de trouver le compte de l'etudiant: %s", e)
+            return "impossible de trouver le compte de l'etudiant"
 
-    @llm.ai_callable(description="creer un etudiant")
+    @llm.ai_callable(
+        description="creer un nouvel etudiant dans la base de données au debut de la conversation"
+    )
     async def create_student(
         self,
         first_name: Annotated[str, llm.TypeInfo(description="le nom de l'etudiant")],
@@ -75,17 +84,18 @@ class AssistantFunction(llm.FunctionContext):
         date_of_birth: Annotated[
             str, llm.TypeInfo(description="la date de naissance de l'etudiant")
         ],
-        knowledge_level: Annotated[
-            str, llm.TypeInfo(description="niveau de connaissance de l'etudiant")
-        ],
-        score: Annotated[int, llm.TypeInfo(description="le score de l'etudiant")],
-        test_taken: Annotated[
-            bool, llm.TypeInfo(description="si l'etudiant a pris l'examen")
-        ],
-    ) -> Student:
-        """creer un etudiant"""
+    ) -> str:
+        """Appelle cette fonction pour creer un nouvel etudiant dans la base de données au debut de la conversation, apres que l'etudiant ait dit son nom et son prenom
+        cette fonction retourne les informations sur l'etudiant qui va etre creer
+        """
         try:
-            is_student_exist = await db.get_student(first_name, last_name)
+            try:
+                is_student_exist = await db.get_student(first_name, last_name)
+            except Exception as e:
+                logger.info(
+                    "error impossible de trouver le compte de l'etudiant: %s", e
+                )
+            print("is_student_exist", is_student_exist)
             if is_student_exist:
                 logger.info("l'etudiant %s %s existe déja", first_name, last_name)
                 self._student_details = {
@@ -98,21 +108,15 @@ class AssistantFunction(llm.FunctionContext):
                 }
                 return f"l'etudiant {first_name} {last_name} existe déja, voici ses informations \n {self._get_query_str(self._student_details)}"
             logger.info(
-                "creer un etudiant %s %s %s %s %s %s",
+                "creer un etudiant %s %s %s",
                 first_name,
                 last_name,
                 date_of_birth,
-                knowledge_level,
-                score,
-                test_taken,
             )
             stutent = await db.create_student(
                 first_name,
                 last_name,
                 date_of_birth,
-                knowledge_level,
-                score,
-                test_taken,
             )
             self._student_details = {
                 StudentDetails.first_name: stutent.first_name,

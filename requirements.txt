@@ -1,7 +1,10 @@
 livekit-agents
 livekit-plugins-openai
-python-dotenv
+livekit-plugins-cartesia
+livekit-plugins-deepgram
 livekit-plugins-silero
+livekit-plugins-google
+python-dotenv
 pydantic-settings>=2.7.1
 livekit-api
 flask[async]
