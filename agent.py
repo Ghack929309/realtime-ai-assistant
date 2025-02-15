@@ -1,32 +1,43 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
+from http.client import REQUEST_TIMEOUT
 import os
 import re
+from socket import timeout
 from typing import AsyncIterable
 
 import dotenv
-from livekit.agents import AutoSubscribe, JobContext, WorkerOptions, cli, llm
+from livekit import rtc
+from livekit.agents import (
+    AutoSubscribe,
+    JobContext,
+    JobProcess,
+    WorkerOptions,
+    cli,
+    llm,
+)
 from livekit.agents.pipeline import VoicePipelineAgent
 from livekit.plugins import deepgram, google, openai, silero, turn_detector
 
-from src.api import AssistantFunction
+from db import DB_queries
+from src.functions import AssistantFunction
 from src.prompts import INSTRUCTIONS, WELCOME_MESSAGE
 
 dotenv.load_dotenv()
-
+db = DB_queries()
 
 google_credentials_path = os.path.abspath("./google_credentials.json")
-print("google_credentials_path", google_credentials_path)
 
 
 stt = deepgram.STT(
-    model="base",
+    model="nova-2-general",
     interim_results=True,
     smart_format=True,
     punctuate=False,
     filler_words=True,
     profanity_filter=False,
-    keywords=[("LiveKit", 1.5)],
     language="fr",
     api_key=os.getenv("DEEPGRAM_API_KEY"),
 )
@@ -74,21 +85,36 @@ def clean_text_for_tts(
     return _process_chunks()
 
 
+
+
+def prewarm(proc: JobProcess) -> None:
+    proc.userdata["vad"] = silero.VAD.load()
+    proc.userdata["stt"] = stt
+    proc.userdata["tts"] = tts
+
+
 async def entrypoint(ctx: JobContext) -> None:
+    # Connect to LiveKit and set up the participant
+    async with lifespan():
+        print("Initializing lifespan")
     await ctx.connect(auto_subscribe=AutoSubscribe.SUBSCRIBE_ALL)
     participant = await ctx.wait_for_participant()
+    
     init_chat_ctx = llm.ChatContext().append(
         text=INSTRUCTIONS,
         role="system",
     )
     assistant_fnc = AssistantFunction()
+
     agent = VoicePipelineAgent(
         llm=openai.LLM.with_ollama(
             # model="llama3.2:latest",
-            model="gemma-2-27b-it",
+            model="dolphin-2.2.1-mistral-7b",
             base_url="http://localhost:1234/v1",
             # base_url="http://localhost:11434/v1",
             temperature=1,
+            parallel_tool_calls=True,
+            tool_choice="required",
         ),
         vad=silero.VAD.load(),
         turn_detector=turn_detector.EOUModel(),
@@ -97,17 +123,33 @@ async def entrypoint(ctx: JobContext) -> None:
         fnc_ctx=assistant_fnc,
         chat_ctx=init_chat_ctx,
         interrupt_speech_duration=0.5,
-        interrupt_min_words=0,
-        before_tts_cb=clean_text_for_tts,
+        interrupt_min_words=3,
         # minimal silence duration to consider end of turn
         min_endpointing_delay=0.5,
     )
-    print(f"connected to room {ctx.room.name} with participant {participant.identity}")
 
+    # @ctx.room.on("transcription_received")
+    # def on_participant_connected(participant: rtc.RemoteParticipant):
+    #     data = participant.track_publications()
+    #     print("words", data)
+    #     # agent.interrupt(interrupt_all=True)
+    await asyncio.sleep(1)
     agent.start(ctx.room, participant)
 
     await agent.say(WELCOME_MESSAGE)
 
 
+@asynccontextmanager
+async def lifespan():
+    """Initialize the database connection and index."""
+    await db.initialize()
+
+    try:
+        yield
+    except Exception as e:
+        print(f"❌ Lifespan failed: {str(e)}")
+    
+
 if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, prewarm_fnc=prewarm))
