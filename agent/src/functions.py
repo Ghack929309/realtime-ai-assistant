@@ -44,13 +44,13 @@ class AssistantFunction(llm.FunctionContext):
             str_result += f"{key}: {val}\n"
         return str_result
 
-    @llm.ai_callable(description="trouver un etudiant a partir de son nom complet")
+    @llm.ai_callable(description="applelle cette fonction uniquement pour trouver les informations de l'interlocuteur ou pour verifier si l'interlocuteur a deja un compte")
     async def find_student(
         self,
         full_name: Annotated[str, llm.TypeInfo(description="le nom de l'etudiant")],
     ) -> Student:
         try:
-            """trouver un etudiant a partir de son nom complet"""
+            """trouver un etudiant a partir de son nom complet ou verifie si l'interlocuteur a deja un compte"""
             logger.info(
                 "recherche un etudiant a partir de son nom complet %s",
                 full_name,
@@ -58,18 +58,18 @@ class AssistantFunction(llm.FunctionContext):
             student = await db.get_student(full_name)
             if not student:
                 logger.info("etudiant %s not found", full_name)
-                return "impossible de trouver un etudiant avec ce nom et ce prenom"
+                return "impossible de trouver un etudiant avec ce nom, demande a l'interlocuteur s'il veut que tu creer un compte pour lui"
             student_detail = self._get_query_str(self._student_details)
 
             return (
-                f" les informations sur l'etudiant {full_name}  sont \n{student_detail}"
+                f" les informations sur l'etudiant {full_name}  sont \n{student_detail}, la conversation peut maintenant se poursuivre"
             )
         except Exception as e:
             logger.info("error impossible de trouver le compte de l'etudiant: %s", e)
-            return "impossible de trouver le compte de l'etudiant"
+            return "une erreur s'est produite, on va essayer dans quelques minutes"
 
     @llm.ai_callable(
-        description="Excecute cette fonction pour creer le compte d'un etudiant apres avoir eu son nom et prenom"
+        description="applelle cette fonction uniquement pour creer le compte d'un interlocuteur"
     )
     async def create_student(
         self,
@@ -79,6 +79,7 @@ class AssistantFunction(llm.FunctionContext):
     ) -> str:
         """Appelle cette function une fois que l'interlocuteur ait donne sont nom"""
         try:
+            print(f"🖨️ creating student")
             is_student_exist = None
             try:
                 is_student_exist = await db.get_student(full_name)
@@ -103,7 +104,7 @@ class AssistantFunction(llm.FunctionContext):
                  {student_detail} est existe deja dans la base de donnee""".format(
                     student_detail=self._get_query_str(self._student_details)
                 )
-                
+
             logger.info(
                 "creer un etudiant %s ",
                 full_name,
@@ -118,7 +119,7 @@ class AssistantFunction(llm.FunctionContext):
             }
             student_detail = self._get_query_str(self._student_details)
             print("✅student_detail", student_detail)
-            return f" les informations sauvegarder de l'etudiant {full_name}  sont \n{student_detail}"
+            return f" les informations sauvegarder de l'etudiant {full_name}  sont \n{student_detail}, la conversation peut maintenant se poursuivre"
         except Exception as e:
             logger.info("❌error impossible de creer le compte de l'etudiant: %s", e)
             return "impossible de creer le compte de l'etudiant"
@@ -159,7 +160,7 @@ class AssistantFunction(llm.FunctionContext):
         )
         if not student:
             logger.info("etudiant %s not found", full_name)
-            return "impossible de trouver un etudiant avec ce nom"
+            return "impossible de trouver un etudiant avec ce nom, demande a l'interlocuteur s'il veut que tu creer un compte pour lui"
         student_detail = self._get_query_str(self._student_details)
 
-        return f" les informations sur l'etudiant {full_name} sont \n{student_detail}"
+        return f" les informations sur l'etudiant {full_name} sont a jour: \n{student_detail}, la conversation peut maintenant se poursuivre"

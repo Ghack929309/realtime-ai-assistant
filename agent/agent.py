@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from http.client import REQUEST_TIMEOUT
 import os
 import re
-from socket import timeout
 from typing import AsyncIterable
 
 import dotenv
-from livekit import rtc
+
 from livekit.agents import (
     AutoSubscribe,
     JobContext,
@@ -108,13 +106,13 @@ async def entrypoint(ctx: JobContext) -> None:
 
     agent = VoicePipelineAgent(
         llm=openai.LLM.with_ollama(
-            # model="llama3.2:latest",
-            model="dolphin-2.2.1-mistral-7b",
-            base_url="http://localhost:1234/v1",
-            # base_url="http://localhost:11434/v1",
-            temperature=1,
-            parallel_tool_calls=True,
-            tool_choice="required",
+            model="llama3.1:latest",
+            base_url="http://localhost:11434/v1",
+            # model="dolphin-2.2.1-mistral-7b",
+            # base_url="http://localhost:1234/v1",
+            temperature=8,
+            parallel_tool_calls=False,
+            tool_choice="auto",
         ),
         vad=silero.VAD.load(),
         turn_detector=turn_detector.EOUModel(),
